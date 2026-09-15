@@ -263,6 +263,3 @@ def strEnc(data, firstKey, secondKey, thirdKey):
         enc_data += bt64_to_hex(bt)
 
     return enc_data
-
-resultx = strEnc("test", "key1", "key2", "key3")
-print(resultx)
