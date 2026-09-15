@@ -41,21 +41,23 @@ def _new_session() -> requests.Session:
 
 def get_session(force_login: bool = False) -> requests.Session:
     """拿到可用的 session：优先复用 data/cache.json 里的 Cookie，失效则重新登录。"""
+    COMMON_HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.76",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+        "Origin": "https://f.tju.edu.cn",
+        "Referer": "https://f.tju.edu.cn/tp_up/view?m=up",
+    }
+
     if force_login:
-        return _new_session()
+        sess = _new_session()
+        sess.headers.update(COMMON_HEADERS)
+        return sess
 
     if cache_file.is_file():
         sess = requests.session()
-        sess.headers.update(
-            {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.76",
-                "Accept": "application/json, text/javascript, */*; q=0.01",
-                "Accept-Encoding": "gzip, deflate",
-                "Connection": "keep-alive",
-                "Origin": "https://f.tju.edu.cn",
-                "Referer": "https://f.tju.edu.cn/tp_up/view?m=up",
-            }
-        )
+        sess.headers.update(COMMON_HEADERS)
         try:
             with open(cache_file, "r", encoding="utf-8") as f:
                 cookies = json.loads(f.read())
@@ -71,8 +73,9 @@ def get_session(force_login: bool = False) -> requests.Session:
         except Exception as e:  # noqa: BLE001 - 缓存不可用则退回登录
             print_flush(f"{YELLOW}[session] Cookie 缓存不可用（{e}），重新登录{RESET}")
 
-    return _new_session()
-
+    sess = _new_session()
+    sess.headers.update(COMMON_HEADERS)
+    return sess
 
 def job() -> None:
     """单轮任务：保证 session 可用 -> 首次静默灌库 -> 检查新通知。
@@ -99,12 +102,56 @@ def _parse_cron_field(field: str, low: int, high: int) -> int | None:
     return value if low <= value <= high else None
 
 
+def _parse_hour_list(field: str) -> list[int] | None:
+    """解析「时」字段，支持 `*`、`6`、`6-23`、`6,12,18`、`*/2` 及逗号组合。
+
+    `*` 返回 None（表示每小时）；写法非法时抛 ValueError，
+    这样调用方可以明确提示，而不是把非法表达式当成通配符。
+    """
+    field = field.strip()
+    if field == "*":
+        return None
+
+    # */N -> 每 N 小时
+    if field.startswith("*/") and field[2:].isdigit():
+        step = int(field[2:])
+        if step <= 0:
+            raise ValueError(f"非法步长：{field}")
+        return list(range(0, 24, step))
+
+    hours: list[int] = []
+    for part in field.split(","):
+        part = part.strip()
+        if not part:
+            raise ValueError("空字段")
+        if "-" in part:
+            start_text, _, end_text = part.partition("-")
+            if not (start_text.isdigit() and end_text.isdigit()):
+                raise ValueError(f"非法区间：{part}")
+            start, end = int(start_text), int(end_text)
+            if not (0 <= start <= end <= 23):
+                # 包含跨天区间（如 23-6），不支持
+                raise ValueError(f"区间越界或跨天：{part}")
+            hours.extend(range(start, end + 1))
+        elif part.isdigit():
+            value = int(part)
+            if not 0 <= value <= 23:
+                raise ValueError(f"小时越界：{part}")
+            hours.append(value)
+        else:
+            raise ValueError(f"非法写法：{part}")
+    return sorted(set(hours))
+
+
 def apply_schedule(schedule) -> None:
     """根据 POLL_CRON / POLL_INTERVAL_MINUTES 注册定时任务。
 
-    支持 schedule 库自带能力范围内的 cron 子集：
-      * * * * * 形式的「分 时 日 月 周」，其中日/月/周必须是 *，
-      分钟可以用 */N 表示“每 N 分钟”，或 分+时 都是具体数字表示“每天几点几分”。
+    支持 schedule 库能力范围内的 cron 子集（「分 时 日 月 周」，日/月/周必须是 *）：
+      0 * * * *        每小时第 0 分
+      */30 * * * *     每 30 分钟
+      30 9 * * *       每天 09:30
+      0 6-23 * * *     6 点到 23 点之间每小时
+      0 6,12,18 * * *  每天 6/12/18 点
     其余写法（以及 POLL_CRON=""）退回按 POLL_INTERVAL_MINUTES 的固定间隔。
     """
     cron = config.get("POLL_CRON")
@@ -122,18 +169,29 @@ def apply_schedule(schedule) -> None:
                     print_flush(f"{CYAN}[scheduler] 已启动：每 {step} 分钟检查一次（cron: {cron}）{RESET}")
                     return
             minute = _parse_cron_field(minute_field, 0, 59)
-            hour = _parse_cron_field(hour_field, 0, 23)
-            if minute is not None and hour is not None:
-                when = f"{hour:02d}:{minute:02d}"
-                schedule.every().day.at(when).do(_safe_job)
-                print_flush(f"{CYAN}[scheduler] 已启动：每天 {when} 检查一次（cron: {cron}）{RESET}")
-                return
-            if minute is not None and hour_field == "*":
+            try:
+                hour_list = _parse_hour_list(hour_field)
+            except ValueError as e:
+                print_flush(f"{YELLOW}[scheduler] 无法解析「时」字段 {hour_field!r}（{e}），改按固定间隔{RESET}")
+                hour_list = "invalid"
+            if minute is not None and hour_list is None:
+                # 每小时的第 minute 分
                 schedule.every().hour.at(f":{minute:02d}").do(_safe_job)
                 print_flush(f"{CYAN}[scheduler] 已启动：每小时第 {minute} 分钟检查一次（cron: {cron}）{RESET}")
                 return
+            if minute is not None and isinstance(hour_list, list) and hour_list:
+                for hour in hour_list:
+                    schedule.every().day.at(f"{hour:02d}:{minute:02d}").do(_safe_job)
+                schedule_text = (
+                    f"每天 {hour_list[0]:02d}:{minute:02d}"
+                    if len(hour_list) == 1
+                    else f"每天 {hour_list[0]}-{hour_list[-1]} 点之间共 {len(hour_list)} 个整点"
+                )
+                print_flush(f"{CYAN}[scheduler] 已启动：{schedule_text} 各检查一次（cron: {cron}）{RESET}")
+                return
         print_flush(
-            f"{YELLOW}[scheduler] cron 表达式 {cron!r} 超出支持范围（支持 '0 * * * *'、'*/30 * * * *'、'30 9 * * *'），改按固定间隔{RESET}"
+            f"{YELLOW}[scheduler] cron 表达式 {cron!r} 超出支持范围"
+            f"（支持 '0 * * * *'、'*/30 * * * *'、'30 9 * * *'、'0 6-23 * * *'），改按固定间隔{RESET}"
         )
 
     every = int(config.get("POLL_INTERVAL_MINUTES") or 60)
