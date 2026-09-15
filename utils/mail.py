@@ -14,7 +14,8 @@ def _get_smtp_config() -> dict | None:
     Returns a dict with smtp_server, smtp_port, smtp_user, smtp_pass,
     admin_mail, or None if required values are missing.
     """
-    smtp_server = config.get("STMP_SERVER", "")
+    # 兼容两种拼写：旧配置里写的是 STMP_SERVER
+    smtp_server = config.get("SMTP_SERVER", "") or config.get("STMP_SERVER", "")
     smtp_user = config.get("SMTP_USER", "")
     smtp_pass = config.get("SMTP_PASSWORD", "")
     admin_mail = config.get("ADMIN_MAIL", "")

@@ -6,3 +6,6 @@ __pycache__/
 .vscode/
 /data/cache.json
 /data/history.db
+/data/history.db-wal
+/data/history.db-shm
+.uv-cache/

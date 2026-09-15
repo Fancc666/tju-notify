@@ -44,7 +44,6 @@ ENV/
 htmlcov/
 .tox/
 .nox/
-test/
 
 # Environment & secrets
 .env
@@ -82,3 +81,10 @@ yarn-error.log*
 
 # UV / Python project
 .uv/
+.uv-cache/
+
+# 本地数据（数据库/登录缓存不进镜像，容器内重新生成）
+data/history.db
+data/history.db-wal
+data/history.db-shm
+data/cache.json
