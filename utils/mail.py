@@ -51,7 +51,7 @@ def send_info_mail(subject: str, body: str) -> bool:
         msg = EmailMessage()
         msg["From"] = config["smtp_user"]
         msg["To"] = config["admin_mail"]
-        msg["Subject"] = f"[Studyroom] {subject}"
+        msg["Subject"] = f"[TJU-Notify] {subject}"
         msg.set_content(body)
 
         if config["smtp_port"] == 465:
