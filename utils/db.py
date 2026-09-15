@@ -169,6 +169,7 @@ def insert_notices(notices: list[dict[str, Any]]) -> list[str]:
     with connect() as conn:
         for row in rows:
             if not row["resource_id"]:
+                # 如果没有resource_id就不存了
                 continue
             cur = conn.execute(
                 """

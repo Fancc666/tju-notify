@@ -15,8 +15,6 @@ from .printer import print_flush, RED, GREEN, YELLOW, CYAN, RESET
 
 # 邮件正文里单条内容的截断长度，0 表示不截断
 MAIL_CONTENT_LIMIT = int(config.get("MAIL_CONTENT_LIMIT") or 2000)
-# 同一次新通知太多时，只有前几条带正文
-MAIL_DETAIL_LIMIT = int(config.get("MAIL_DETAIL_LIMIT") or 3)
 # 入库正文长度上限，0 表示不限制
 STORE_CONTENT_LIMIT = int(config.get("STORE_CONTENT_LIMIT") or 0)
 
@@ -61,11 +59,10 @@ def _build_mail(notices: list[dict[str, Any]]) -> tuple[str, str]:
         lines.append(
             f"   详情　　：https://f.tju.edu.cn/tp_up/view?m=up#act=portal/viewNotice&resourceId={item.get('RESOURCE_ID') or ''}"
         )
-        if index <= MAIL_DETAIL_LIMIT:
-            content = _trim(item.get("PIM_CONTENT"), MAIL_CONTENT_LIMIT)
-            if content:
-                lines.append("   正文　　：")
-                lines.extend(f"     {line}" for line in content.splitlines() or [content])
+        content = _trim(item.get("PIM_CONTENT"), MAIL_CONTENT_LIMIT)
+        if content:
+            lines.append("   正文　　：")
+            lines.extend(f"     {line}" for line in content.splitlines() or [content])
         lines.append("")
     lines.append(f"—— 由 tju-notify 于 {datetime.now(CST).strftime('%Y-%m-%d %H:%M:%S')} 自动发送")
     return subject, "\n".join(lines)
@@ -85,7 +82,7 @@ def check_once(session: requests.Session, session_provider=None) -> int:
         if session_provider is None:
             print_flush(f"{RED}[poll] 拉取通知失败：{e}{RESET}")
             raise
-        print_flush(f"{YELLOW}[poll] 拉取通知失败（{e}），尝试重新登录后重试一次{RESET}")
+        print_flush(f"{YELLOW}[poll] 拉取通知失败（{e}），尝试重新登录{RESET}")
         session = session_provider()
         notices = fetch_notices_with_retry(session)
 
@@ -93,7 +90,7 @@ def check_once(session: requests.Session, session_provider=None) -> int:
         print_flush(f"{YELLOW}[poll] 本轮没有拿到通知通告{RESET}")
         return 0
 
-    # 已入库的 resource_id 集合（一次查询）
+    # 已入库的 resource_id 集合，查找出新的id
     known = db.get_existing_ids([str(item.get("RESOURCE_ID") or "") for item in notices])
     new_items = [
         item for item in notices if str(item.get("RESOURCE_ID") or "") not in known
@@ -103,7 +100,7 @@ def check_once(session: requests.Session, session_provider=None) -> int:
         print_flush(f"{GREEN}[poll] 共 {len(notices)} 条通知，没有新增{RESET}")
         return 0
 
-    # 按发布时间从新到旧
+    # 按发布时间从新到旧处理
     new_items.sort(key=lambda x: int(x.get("CREATE_TIME") or 0), reverse=True)
 
     if STORE_CONTENT_LIMIT:
@@ -131,7 +128,8 @@ def bootstrap(session: requests.Session) -> int:
     """
     if db.count_notices() > 0:
         return 0
-    print_flush(f"{YELLOW}[init] 数据库为空，先静默灌入历史通知（不发邮件）{RESET}")
+    # 如果首次运行
+    print_flush(f"{YELLOW}[init] 数据库为空，静默灌入历史通知{RESET}")
     notices = fetch_notices_with_retry(session)
     if not notices:
         return 0

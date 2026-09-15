@@ -77,15 +77,15 @@ def get_session(force_login: bool = False) -> requests.Session:
 def job() -> None:
     """单轮任务：保证 session 可用 -> 首次静默灌库 -> 检查新通知。
 
-    只要数据库为空（首次运行），就先静默把当前接口返回的通知入库、不发邮件，
+    只要数据库为空（首次运行），就把当前接口返回的通知入库、不发邮件。
     之后的每一轮才只针对真正的新通知发信。调度模式和 --once 都走这里。
     """
     sess = get_session()
 
     if str(config.get("BOOTSTRAP_ON_START") or "1") == "1":
-        bootstrap(sess)  # 库里已有数据时内部直接返回，不会重复灌
+        bootstrap(sess)  # 库里已有数据时内部直接返回
 
-    check_once(sess, session_provider=lambda: get_session(force_login=True))
+    check_once(sess) # 禁用这里的retry
 
 
 def _parse_cron_field(field: str, low: int, high: int) -> int | None:
@@ -156,7 +156,7 @@ def run_scheduler() -> None:
 
     while True:
         schedule.run_pending()
-        time.sleep(30)
+        time.sleep(10)
 
 
 def _safe_job() -> None:
@@ -168,7 +168,9 @@ def _safe_job() -> None:
 
 
 def seed_sample(no_email: bool = True) -> int:
-    """把 data/sample_notices.json 里的样例通知写入数据库，用于本地测试。
+    """仅供测试。
+    
+    把 data/sample_notices.json 里的样例通知写入数据库，用于本地测试。
 
     只写入「通知通告」类型；已存在的 resource_id 会自动跳过。
     """
@@ -188,8 +190,7 @@ def seed_sample(no_email: bool = True) -> int:
     )
     if inserted and no_email:
         print_flush(
-            f"{YELLOW}[seed] 已跳过邮件；样例只是便于查看数据/表结构，"
-            f"不会触发邮件（它不在接口返回里）{RESET}"
+            f"{YELLOW}[seed] 已跳过邮件{RESET}"
         )
     return 0
 

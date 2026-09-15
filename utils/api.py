@@ -13,8 +13,6 @@ from .printer import print_flush, YELLOW, RESET
 # 通知列表接口
 LIST_URL = "https://f.tju.edu.cn/tp_up/up/messages/getAllPimList"
 
-# 「通知通告」的英文类型名；可用环境变量 NOTICE_TYPE 覆盖
-NOTICE_TYPE = (config.get("NOTICE_TYPE") or "Notice").strip()
 # 一次拉取多少条
 LIMIT_SIZE = int(config.get("LIMIT_SIZE") or 30)
 # 网络请求超时（秒）
@@ -26,12 +24,8 @@ MAX_RETRY = int(config.get("MAX_RETRY") or 3)
 def is_notice(item: dict[str, Any]) -> bool:
     """判断一条记录是不是「通知通告」。
 
-    以 TYPE_ENGLISH_NAME 为准（接口里为 "Notice"，也见过小写 "news"），
-    拿不到时退化为按 TYPE_NAME 判断。
+    按 TYPE_NAME 判断。
     """
-    english = str(item.get("TYPE_ENGLISH_NAME") or "").strip()
-    if english:
-        return english.lower() == NOTICE_TYPE.lower()
     return "通知" in str(item.get("TYPE_NAME") or "")
 
 
