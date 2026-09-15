@@ -48,6 +48,7 @@ class LoginLoader:
             raise Exception("execution not found")
         execution = execution.get("value")
         rsa = strEnc(self.usr + self.pwd + lt, "1", "2", "3")
+        # print(rsa)
         # we only need session
         login_response = self.x.post(self.login_url, headers=self.headers, data={
             "code": captcha,
@@ -59,7 +60,7 @@ class LoginLoader:
             "_eventId": "submit",
         }, timeout=self.REQUEST_TIMEOUT)
         home_response = self.x.get(
-            "https://classes.tju.edu.cn/eams/homeExt.action",
+            "https://f.tju.edu.cn/tp_up/view?m=up#act=portal/viewhome",
             headers=self.headers,
             timeout=self.REQUEST_TIMEOUT,
         )

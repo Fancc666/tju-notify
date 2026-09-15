@@ -4,3 +4,5 @@ __pycache__/
 .env
 *.state.json
 .vscode/
+/data/cache.json
+/data/history.db
