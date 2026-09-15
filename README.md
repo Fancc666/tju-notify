@@ -27,7 +27,7 @@ POST /tp_up/up/messages/getAllPimList   （每次 30 条）
 | `utils/db.py` | SQLite 建表与增删查 |
 | `utils/notify.py` | 单轮任务编排：对比、入库、拼邮件、发信 |
 | `utils/login.py` | CAS 登录 |
-| `utils/captcha.py` | ddddocr 验证码识别 |
+| `utils/captcha.py` | 验证码识别 |
 | `utils/custom_des.py` | 登录密码所需的 DES 实现 |
 | `utils/mail.py` | SMTP 发信 |
 | `utils/EnvironTool.py` | `.env` 与系统环境变量统一读取 |
@@ -39,7 +39,7 @@ POST /tp_up/up/messages/getAllPimList   （每次 30 条）
 
 复制 `.env.example` 为 `.env` 并按照提示填写环境变量。
 
-`POLL_CRON` 支持 `schedule` 库能力范围内的子集：`0 * * * *`（每小时第 0 分）、`*/30 * * * *`（每 30 分钟）、`30 9 * * *`（每天 09:30）；无法识别的表达式会退回按 `POLL_INTERVAL_MINUTES` 执行。
+`POLL_CRON` 支持常用子集：`0 * * * *`（每小时第 0 分）、`*/30 * * * *`（每 30 分钟）、`30 9 * * *`（每天 09:30）、`0 6-23 * * *`（6-23 点每小时）、`0 6,12,18 * * *`（每天 3 个整点）；无法识别的表达式会退回按 `POLL_INTERVAL_MINUTES` 执行（会打印提示）。
 
 ## 使用
 
