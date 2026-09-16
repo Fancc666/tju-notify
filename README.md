@@ -73,10 +73,13 @@ python main.py --recent 5
 
 ### 使用Docker
 
+需要注意容器时区，否则Scheduler会出异常。`--restart unless-stopped`可以看需求添加。
+
 ```bash
 docker build -t tju-notify .
 docker run -d --name tju-notify \
   --env-file .env \
+  -e TZ=Asia/Shanghai \
   -v "$PWD/data:/app/data" \
   tju-notify
 ```
